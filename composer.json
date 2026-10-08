@@ -1,0 +1,33 @@
+{
+    "$schema": "https://getcomposer.org/schema.json",
+    "name": "andronewille/sluis-dev",
+    "description": "The workspace: the suite and the style run over every package at once.",
+    "license": "EUPL-1.2",
+    "type": "project",
+    "require": {
+        "php": "^8.3"
+    },
+    "require-dev": {
+        "laravel/pint": "^1.27",
+        "phpunit/phpunit": "^12.5"
+    },
+    "autoload": {
+        "psr-4": {
+            "Sluis\\": "packages/core/src/",
+            "Sluis\\Onnx\\": "packages/onnx/src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Sluis\\Tests\\": "packages/core/tests/",
+            "Sluis\\Onnx\\Tests\\": "packages/onnx/tests/"
+        }
+    },
+    "config": {
+        "optimize-autoloader": true,
+        "preferred-install": "dist",
+        "sort-packages": true
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}

@@ -1,0 +1,9 @@
+/vendor/
+/packages/*/vendor/
+/packages/*/composer.lock
+/.transformers-cache/
+/models/
+*.vault.json
+sluis-vault.json
+.phpunit.result.cache
+.DS_Store

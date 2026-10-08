@@ -1,0 +1,87 @@
+name: tests
+
+# Style and the suite. The core is tested without FFI on purpose: it is what proves
+# that installing Sluis needs no extension a shared host might not have.
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        php: ['8.3', '8.4', '8.5']
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: mbstring, sodium
+          coverage: none
+
+      - name: Cache Composer
+        uses: actions/cache@v5
+        with:
+          path: ~/.composer/cache
+          key: composer-${{ matrix.php }}-${{ hashFiles('composer.lock') }}
+
+      - run: composer install --no-interaction --prefer-dist --no-progress
+
+      - run: vendor/bin/pint --test
+
+      - run: vendor/bin/phpunit
+
+  # Its own job, and not a step in the matrix above: the pointers in the docs are the
+  # same on every PHP version, and checking them needs no PHP at all.
+  docs:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - run: bin/check-pointers
+
+  # Composer reads a composer.json at the root of a repository and nowhere else, so each
+  # package is split out to a read-only mirror for Packagist to follow. Behind the other two
+  # jobs on purpose: a red build publishes nothing. A split is the same commit every time it
+  # is made from the same history, so main and a tag pushed later agree on what they point at.
+  split:
+    needs: [test, docs]
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        include:
+          - package: core
+            mirror: Andronewille/sluis-core
+          - package: onnx
+            mirror: Andronewille/sluis-onnx
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Split packages/${{ matrix.package }} to ${{ matrix.mirror }}
+        env:
+          SPLIT_TOKEN: ${{ secrets.SPLIT_TOKEN }}
+        run: |
+          commit=$(git subtree split --prefix="packages/${{ matrix.package }}")
+          mirror="https://x-access-token:${SPLIT_TOKEN}@github.com/${{ matrix.mirror }}.git"
+
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            git push "$mirror" "$commit:refs/tags/$GITHUB_REF_NAME"
+          else
+            git push "$mirror" "$commit:refs/heads/main"
+          fi

@@ -1,0 +1,145 @@
+#!/bin/sh
+#
+# The docs point into the code with path:line, and a line number is the one kind of
+# reference that rots quietly: the file is still there, the line still has something
+# on it, and it is no longer what the sentence promised. This reads every reference in
+# CLAUDE.md and README.md, prints what each one lands on, and fails when it lands on
+# nothing - a missing file, a line past the end, a blank line, a lone brace, a
+# comment. Reading the printed column is the other half of the check: a pointer that
+# slid two methods down still lands on code, and only a person can see that it is the
+# wrong code.
+#
+# A reference must be written from the repository root, because that is the only form
+# that can be checked from here.
+#
+# No PHP and no Docker, on purpose: this has to be runnable before a commit.
+
+set -eu
+
+cd "$(dirname "$0")/.."
+
+prog=$(cat <<'AWK'
+function exists(p) {
+    return system("test -e " p) == 0
+}
+
+# The contents of line `want` of `path`, or the sentinel when the file is shorter.
+function at(path, want,   n, line) {
+    n = 0
+    while ((getline line < path) > 0) {
+        n++
+        if (n == want) {
+            close(path)
+            return line
+        }
+    }
+    close(path)
+    return SHORT
+}
+
+function trim(s) {
+    gsub(/^[ \t]+|[ \t]+$/, "", s)
+    return s
+}
+
+function ok(where, ref, note) {
+    printf "  %-14s %-58s %s\n", where, ref, note
+    checked++
+}
+
+function bad(where, ref, note) {
+    printf "! %-14s %-58s %s\n", where, ref, note
+    broken[++fails] = where "  " ref "  " note
+}
+
+function check(where, ref,   path, want, line, body) {
+    if (ref ~ /:[0-9]+$/) {
+        path = ref
+        sub(/:[0-9]+$/, "", path)
+        want = ref
+        sub(/^.*:/, "", want)
+        want = want + 0
+
+        if (path !~ /\//) return                       # a word with a number, not a path
+        if (path !~ /^[A-Za-z0-9_.\/-]+$/) return      # prose in ticks, not a path
+
+        if (path !~ /^(packages|docker)\//) {
+            bad(where, ref, "not written from the repository root")
+            return
+        }
+        if (! exists(path)) {
+            bad(where, ref, "no such file")
+            return
+        }
+
+        line = at(path, want)
+        if (line == SHORT) {
+            bad(where, ref, "the file has fewer lines than that")
+            return
+        }
+
+        body = trim(line)
+        if (body == "") {
+            bad(where, ref, "lands on a blank line")
+        } else if (body ~ /^[{}();,]+$/) {
+            bad(where, ref, "lands on punctuation: " body)
+        } else if (body ~ /^(\/\/|\/\*|\*|#)/) {
+            bad(where, ref, "lands on a comment: " body)
+        } else {
+            ok(where, ref, body)
+        }
+
+        return
+    }
+
+    # A path with no line number: only that it is still there.
+    if (ref !~ /^(packages|docker)\//) return
+    if (ref !~ /^[A-Za-z0-9_.\/-]+$/) return
+
+    path = ref
+    sub(/\/$/, "", path)
+
+    if (exists(path)) {
+        ok(where, ref, "exists")
+    } else {
+        bad(where, ref, "no such file or directory")
+    }
+}
+
+BEGIN {
+    SHORT = "\001"
+    TICK = "\140"                 # a backtick, written so no shell can see one
+    IN_TICKS = TICK "[^" TICK "]+" TICK
+}
+
+FNR == 1 { printf "%s\n", FILENAME }
+
+{
+    rest = $0
+    while (match(rest, IN_TICKS)) {
+        check(FILENAME ":" FNR, substr(rest, RSTART + 1, RLENGTH - 2))
+        rest = substr(rest, RSTART + RLENGTH)
+    }
+}
+
+END {
+    total = checked + fails
+
+    printf "\n%d reference%s checked", total, (total == 1 ? "" : "s")
+
+    if (fails == 0) {
+        printf ", all landing somewhere.\n"
+        exit 0
+    }
+
+    printf ", %d broken:\n", fails
+    for (i = 1; i <= fails; i++) {
+        printf "  %s\n", broken[i]
+    }
+    printf "\nFix the reference, or the sentence around it.\n"
+    exit 1
+}
+AWK
+)
+
+awk "$prog" CLAUDE.md README.md
