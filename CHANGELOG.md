@@ -10,20 +10,32 @@ behaviour: a new rule masks text an older version left alone, and the changelog 
 - The command says what the API says: `sluis mask` and `sluis unmask`. `--reverse` is gone and
   says where it went; a bare `sluis` still masks.
 - `sluis unmask --json` reads `{"text":…,"vault":…}`, which is what `sluis --json` answers, and
-  answers `{"text":…,"unrestored":…,"stray":…}`. No vault file is needed for the round trip.
+  answers `{"text":…,"unrestored":…,"stray":…}`. No vault file is needed for the round trip, and
+  none is used unless `--vault` names it.
 - Strict grouping belongs to the vault alone. `Sluis::nederlands(strict: true)` is gone: pass
   `Vault::empty(strict: true)` to `mask()`. `--strict` against a vault that began without it exits
   `2` instead of being ignored, and so does `--strict` with `unmask`.
 - `Sluis::only()` and `Sluis::without()` choose which kinds are masked, without assembling the
-  recognisers by hand.
+  recognisers by hand. A kind that is left out is as if there were no rule for it.
+- Text that is not UTF-8 is refused, on the way in and on the way back. It used to come through
+  unmasked with exit `0`, because a pattern that cannot read a text reports that it found nothing.
+- A long thread is masked in a fraction of the time, and at all: 200 kB with the same few names in
+  every mail ran out of memory in 0.1.0, and now takes about half a second.
+- A recogniser reports every claim and no longer settles its own overlaps; `Anonymise` settles them
+  once. A recogniser of your own may keep settling, and loses nothing but the choice above.
+- A vault says that it is one: `version` 1 and `entries`, every entry filed under a mask. Other
+  JSON at `--vault` is refused instead of read as empty and written over.
+- A directory at `--vault` is refused before it is touched.
+- `sluis --json` writes `found` and `entries` as objects also when they are empty.
+- An argument the command does not know is not quoted back unless it is the name of an option.
 - `mask()` and `unmask()` are `#[NoDiscard]`: throwing away what they return is a warning.
 - `Sluis::with()` is gone, since it was the constructor under another name: `new Sluis($recogniser)`.
 - `Span::$found` is `Span::$by`. It names the rule that found the span, and shared its name with
   the counts in `Masked::$found`.
 - The command takes `--vault PATH` as well as `--vault=PATH`, answers `--version`, and builds no
   recogniser to unmask.
-- `Gazetteer::fromFile()` throws when the list is not there, where it used to read as empty and
-  mask nothing.
+- `Gazetteer::fromFile()` throws when the list is not there or holds no words, where it used to
+  read as empty and mask nothing, and reads past a byte order mark.
 - `--help` says that `--raw=TEXT` is readable by every user on the machine while the command runs,
   and the README pipes the text in instead.
 - A vault file that does not hold what Sluis wrote is refused with a message of its own, instead of

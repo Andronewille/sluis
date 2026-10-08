@@ -74,14 +74,14 @@ where to look before arguing with it.
   `packages/core/tests/ArchitectureTest.php:27`, `packages/onnx/tests/ArchitectureTest.php:18`.
 - **`Vault::value()` has one caller: the reverse path.** Anything else that wants a value — a log
   line, a progress message, a nicer error — is the leak this tool exists to prevent.
-  `packages/core/src/Domain/Vault.php:125`, kept true at
+  `packages/core/src/Domain/Vault.php:148`, kept true at
   `packages/core/tests/ArchitectureTest.php:103` and `packages/core/tests/ArchitectureTest.php:125`.
 - **No plaintext in an exception, a log or a dump.** A message names the type and the recogniser,
   never the words.
 - **A recogniser that cannot place what it found throws.** Skipping leaves the value in the text and
-  reports success: `packages/core/src/Application/Anonymise.php:96`, `packages/onnx/src/Onnx.php:117`.
+  reports success: `packages/core/src/Application/Anonymise.php:97`, `packages/onnx/src/Onnx.php:117`.
 - **Masked text is checked on every run, not only in tests** —
-  `packages/core/src/Application/Anonymise.php:140`.
+  `packages/core/src/Application/Anonymise.php:173`.
 - **The reverse path only substitutes.** No recogniser, no model, no branching on content.
 - **The domain imports nothing and the application does not know its adapters.** `Sluis.php` is the
   one allowed exception.

@@ -66,7 +66,7 @@ sluis < mail.txt > masked.txt          # the vault lands in sluis-vault.json, mo
 cat masked.txt | your-ai | sluis unmask
 
 sluis --json < mail.txt                # {"text":…,"found":…,"vault":…} and nothing on disk
-sluis unmask --json < answer.json      # reads {"text":…,"vault":…}, answers {"text":…,"stray":…}
+sluis unmask --json < answer.json      # reads {"text":…,"vault":…}, answers {"text":…,"unrestored":…,"stray":…}
 sluis --help                           # and --version
 ```
 
@@ -77,13 +77,18 @@ and not for mail: an argument is in every `ps` on the machine for as long as the
 Not everything has to go. What is sensitive enough to take out is the caller's to say:
 
 ```php
-$sluis->only(PiiType::Iban, PiiType::Bsn)->mask($mail);     // these, and nothing else that is found
-$sluis->without(PiiType::Url, PiiType::Stad)->mask($mail);  // everything but these
+$masked = $sluis->only(PiiType::Iban, PiiType::Bsn)->mask($mail);     // these, and nothing else
+$masked = $sluis->without(PiiType::Url, PiiType::Stad)->mask($mail);  // everything but these
 ```
 
-The choice is made after overlapping finds are settled, so leaving addresses alone leaves `Jan
-Steenlaan 4` alone, first name and all. It holds for every recogniser, whenever it was added, and
-narrowing down to nothing is refused.
+A kind that is left out is as if Sluis had no rule for it. The choice is made before overlapping
+finds are settled, because settling goes by rank: a find that is left out would first win its
+overlap and then be dropped, taking with it the find the caller did want. One telephone number in
+eleven passes the elfproef and would stay readable under `only(PiiType::Telefoon)`; a name that once
+follows `naar` would stay under `without(PiiType::Stad)`. The price is the other direction: with
+addresses left out, the `Jan` of `Jan Steenlaan 4` is a first name again and is masked. It holds for
+every recogniser, whenever it was added. Narrowing down to nothing is refused, and so is `only()`
+for a kind an earlier `without()` took away.
 
 A vault that is already at `--vault` is read and extended rather than replaced, so a run of mail
 through the same vault keeps one person on one token. That also means the file grows: it is a pile
@@ -92,7 +97,13 @@ longer than the command that made it.
 
 `--json` is the shape an API wants: the vault comes back in the answer and Sluis keeps nothing.
 What `mask --json` answers is what `unmask --json` reads, so a caller that holds the vault itself
-never needs a file. A vault in the JSON wins over one at `--vault`.
+never needs a file. A vault in the JSON wins over one at `--vault`, and with `--json` no vault file
+is read or written unless `--vault` names it: `sluis-vault.json` is the default of the plain pipe
+only. Every vault numbers its tokens from one, so the file an earlier run left behind fits a text
+it was never made for.
+
+The text is UTF-8 or it is refused. A mail in Windows-1252 has one byte for `é`, and a pattern asked
+to read that byte answers the way it answers when nothing is there.
 `SLUIS_VAULT_KEY` in the environment seals the vault file with that passphrase; the key is taken
 from the environment and not from an argument, because an argument is in every `ps` on the machine.
 
@@ -264,7 +275,8 @@ Written down rather than discovered later.
 - **A town is the shallowest rule here.** `in Haasterdam` works, `Haasterdam is mooi` does not. The
   word lists in `data/` are seeds — a few dozen names and towns — and real coverage means either
   the model or feeding `Gazetteer::fromFile()` the open BAG or CBS lists yourself. Sluis reads a
-  file; it never fetches one, and a file that is not there is an error and not an empty list.
+  file; it never fetches one, and a file that is not there, or holds no words, is an error and not
+  an empty list.
 - **Masking more than needed is the failure mode.** A first name that is also an ordinary word gets
   masked wherever it appears once it has been recognised anywhere. The text suffers; nothing leaks.
 - **`aan de adres1mask`.** The article stays, unlike in the first sketch of this tool: leaving `de`
