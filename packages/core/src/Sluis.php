@@ -1,7 +1,11 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Sluis;
 
+use InvalidArgumentException;
+use NoDiscard;
 use Sluis\Application\Anonymise;
 use Sluis\Application\Deanonymise;
 use Sluis\Application\Ports\Recogniser;
@@ -29,10 +33,15 @@ use Sluis\Infrastructure\Recognisers\Places;
  */
 final readonly class Sluis
 {
-    public function __construct(
-        private Recogniser $recogniser,
-        private bool $strict = false,
-    ) {}
+    /** @var list<PiiType> what is masked when it is found; everything, until the caller says otherwise */
+    private array $types;
+
+    public function __construct(private Recogniser $recogniser)
+    {
+        self::refuseWhatIsNoLongerTaken(func_num_args() - 1);
+
+        $this->types = self::everyKind();
+    }
 
     /**
      * Everything the core can do without a model: the formats, Dutch addresses,
@@ -40,8 +49,10 @@ final readonly class Sluis
      * are in `data/`. Add the model on top with `plus()`; it is better at prose
      * and it cannot replace a check digit.
      */
-    public static function nederlands(bool $strict = false): self
+    public static function nederlands(): self
     {
+        self::refuseWhatIsNoLongerTaken(func_num_args());
+
         $data = dirname(__DIR__).'/data';
 
         return new self(new Chain(
@@ -51,12 +62,7 @@ final readonly class Sluis
             new Places,
             Gazetteer::fromFile(PiiType::Voornaam, $data.'/voornamen.txt'),
             Gazetteer::fromFile(PiiType::Stad, $data.'/plaatsnamen.txt'),
-        ), $strict);
-    }
-
-    public static function with(Recogniser $recogniser, bool $strict = false): self
-    {
-        return new self($recogniser, $strict);
+        ));
     }
 
     /** More eyes on the same text; what they disagree about is settled by type. */
@@ -66,16 +72,89 @@ final readonly class Sluis
             ? $this->recogniser->plus(...$more)
             : new Chain($this->recogniser, ...$more);
 
-        return new self($chain, $this->strict);
+        return clone ($this, ['recogniser' => $chain]);
     }
 
+    /**
+     * Mask these kinds and leave the rest of what is found standing. What is
+     * sensitive enough to take out is the caller's decision; this is where it is
+     * made, whatever recognisers are added before or after.
+     *
+     * A kind that is left out is as if Sluis had no rule for it, so what it would
+     * have covered is open to the kinds that remain: with addresses left alone,
+     * the `Jan` of `Jan Steenlaan 4` is a first name and is masked.
+     */
+    public function only(PiiType $type, PiiType ...$more): self
+    {
+        $asked = [$type, ...array_values($more)];
+
+        $gone = array_map(
+            fn (PiiType $kind) => $kind->value,
+            array_filter($asked, fn (PiiType $kind) => ! in_array($kind, $this->types, true)),
+        );
+
+        if ($gone !== []) {
+            throw new InvalidArgumentException('This Sluis was already told to leave '.implode(', ', $gone).' alone, and only() cannot bring that back.');
+        }
+
+        return $this->masking($asked);
+    }
+
+    /** Mask everything that is found except these kinds. */
+    public function without(PiiType $type, PiiType ...$more): self
+    {
+        return $this->masking(array_filter($this->types, fn (PiiType $kept) => ! in_array($kept, [$type, ...$more], true)));
+    }
+
+    /**
+     * Hand in the vault of an earlier mail and one person stays on one token across
+     * both. How spellings are grouped is the vault's to say and nobody else's:
+     * `Vault::empty(strict: true)` when the text has to come back byte for byte.
+     */
+    #[NoDiscard('the masked text and the vault that puts the people back are in what mask() returns')]
     public function mask(string $text, ?Vault $vault = null): Masked
     {
-        return (new Anonymise($this->recogniser))($text, $vault ?? Vault::empty($this->strict));
+        return (new Anonymise($this->recogniser, $this->types === self::everyKind() ? null : $this->types))($text, $vault);
     }
 
+    #[NoDiscard('what unmask() returns says which masks could not be put back')]
     public function unmask(string $text, Vault $vault): Restored
     {
         return (new Deanonymise)($text, $vault);
+    }
+
+    /**
+     * A Sluis that masks nothing would report success on every mail it let
+     * through, so narrowing down to nothing is refused where it happens.
+     *
+     * @param  array<PiiType>  $types
+     */
+    private function masking(array $types): self
+    {
+        if ($types === []) {
+            throw new InvalidArgumentException('Nothing is left to mask: every kind Sluis finds was excluded.');
+        }
+
+        // In the order the kinds are declared and each of them once, so that two
+        // ways of asking for the same thing are the same Sluis.
+        return clone ($this, ['types' => array_values(array_filter(self::everyKind(), fn (PiiType $kind) => in_array($kind, $types, true)))]);
+    }
+
+    /** @return list<PiiType> */
+    private static function everyKind(): array
+    {
+        return PiiType::cases();
+    }
+
+    /**
+     * 0.1 took `strict` here, and PHP passes an argument a function no longer
+     * declares without a word. A caller who still writes `nederlands(true)` asked
+     * for text that comes back byte for byte and would get the other kind.
+     */
+    private static function refuseWhatIsNoLongerTaken(int $extra): void
+    {
+        if ($extra > 0) {
+            throw new InvalidArgumentException('Strict grouping is the vault\'s to say: pass Vault::empty(strict: true) to mask().');
+        }
     }
 }

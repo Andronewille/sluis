@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Sluis\Domain;
 
 use InvalidArgumentException;
@@ -40,19 +42,63 @@ final class Vault
         return new self($strict);
     }
 
-    /** @param array<string, mixed> $data */
+    /**
+     * What comes in here was read from a file or handed over by a caller, so its
+     * shape is checked rather than cast: an entry that is not a type and a value
+     * is refused, because a vault that half loads puts half the people back.
+     *
+     * It has to say it is a vault, too. Read as an empty one, any other JSON a
+     * path happens to point at — an answer that was saved, a composer.json — is
+     * a vault with nobody in it, and the next run writes over it.
+     *
+     * @param  array<array-key, mixed>  $data
+     */
     public static function fromArray(array $data): self
     {
-        $vault = new self((bool) ($data['strict'] ?? false));
+        $strict = $data['strict'] ?? false;
+        $entries = $data['entries'] ?? null;
 
-        foreach ($data['entries'] ?? [] as $token => $entry) {
-            $type = PiiType::tryFrom((string) ($entry['type'] ?? ''))
-                ?? throw new InvalidArgumentException("The vault names a type Sluis does not know: {$entry['type']}.");
+        if (($data['version'] ?? null) !== 1 || ! is_bool($strict) || ! is_array($entries)) {
+            throw new InvalidArgumentException('That is not a vault this version of Sluis reads: it wants version 1, strict as yes or no, and entries.');
+        }
 
-            $vault->put((string) $token, $type, (string) $entry['value']);
+        $vault = new self($strict);
+
+        foreach ($entries as $token => $entry) {
+            $type = is_array($entry) ? ($entry['type'] ?? null) : null;
+            $value = is_array($entry) ? ($entry['value'] ?? null) : null;
+
+            if (! is_string($type) || ! is_string($value)) {
+                throw new InvalidArgumentException('The vault is not one Sluis wrote: an entry has no type or no value.');
+            }
+
+            // A token is what `mint()` makes and nothing looser. A list where the
+            // entries should be has the tokens 0, 1, 2, and an empty key is a token
+            // that stands between every two characters of the text.
+            if (preg_match('/^[a-z]+\d+mask$/', (string) $token) !== 1) {
+                throw new InvalidArgumentException('The vault is not one Sluis wrote: an entry is not filed under a mask.');
+            }
+
+            $vault->put(
+                (string) $token,
+                PiiType::tryFrom($type) ?? throw new InvalidArgumentException('The vault names a type Sluis does not know.'),
+                $value,
+            );
         }
 
         return $vault;
+    }
+
+    /**
+     * The one place that says whether a piece of JSON is a vault. A file, a
+     * sealed file and an answer on stdin all ask here, so all three refuse the
+     * same things in the same words.
+     */
+    public static function fromJson(string $json): self
+    {
+        $data = json_decode($json, true);
+
+        return self::fromArray(is_array($data) ? $data : []);
     }
 
     /** @return array<string, mixed> */
@@ -75,6 +121,8 @@ final class Vault
      * overwritten when the vault is played back over it.
      *
      * @param  callable(string): bool  $taken
+     *
+     * @phpstan-impure
      */
     public function mint(PiiType $type, string $value, callable $taken): string
     {

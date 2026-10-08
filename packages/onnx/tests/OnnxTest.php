@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Sluis\Onnx\Tests;
 
 use PHPUnit\Framework\TestCase;
@@ -185,7 +187,7 @@ class OnnxTest extends TestCase
         $spans = $this->recognise('Sietske sprak met Bouwmeester.', [
             ['entity_group' => 'PER', 'word' => 'Bouwmeester'],
             ['entity_group' => 'PER', 'word' => 'Sietske'],
-        ]);
+        ])->resolved();
 
         $this->assertCount(2, $spans);
         $this->assertSame(['Sietske', 'Bouwmeester'], array_map(fn ($s) => $s->text, iterator_to_array($spans)));
@@ -221,7 +223,7 @@ class OnnxTest extends TestCase
     public function test_a_piece_of_a_word_takes_the_whole_word_and_comes_back(): void
     {
         $text = 'Vorige week was ik in Geertruidenberg.';
-        $sluis = Sluis::with(new Onnx(FakePipeline::answering([
+        $sluis = new Sluis(new Onnx(FakePipeline::answering([
             ['entity_group' => 'LOC', 'word' => 'truidenberg'],
         ]), Profile::ner()));
 
@@ -229,5 +231,20 @@ class OnnxTest extends TestCase
 
         $this->assertSame('Vorige week was ik in stad1mask.', $masked->text);
         $this->assertSame($text, $sluis->unmask($masked->text, $masked->vault)->text);
+    }
+
+    /**
+     * A pipeline that answers without a score is sure enough to have answered.
+     * Reading the missing score as nothing put it under every floor: the name
+     * was skipped, the text came back untouched, and the run reported success.
+     */
+    public function test_an_answer_without_a_score_is_still_masked(): void
+    {
+        $onnx = new Onnx(new FakePipeline([[['entity_group' => 'PER', 'word' => 'Sietske']]]), Profile::ner());
+
+        $spans = $onnx->recognise('Groeten van Sietske uit het dorp.');
+
+        $this->assertCount(1, $spans);
+        $this->assertSame('Sietske', $spans->first()->text);
     }
 }

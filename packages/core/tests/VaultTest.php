@@ -1,8 +1,12 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Sluis\Tests;
 
+use InvalidArgumentException;
 use PHPUnit\Framework\TestCase;
+use RuntimeException;
 use Sluis\Domain\PiiType;
 use Sluis\Domain\Vault;
 use Sluis\Infrastructure\Vaults\JsonFile;
@@ -110,7 +114,7 @@ class VaultTest extends TestCase
 
         $store->write($path = $this->dir.'/v.sealed', $vault);
 
-        $this->assertStringNotContainsString('Karel', file_get_contents($path));
+        $this->assertStringNotContainsString('Karel', (string) file_get_contents($path));
         $this->assertSame('Karel', $store->read($path)->value('voornaam1mask'));
     }
 
@@ -152,5 +156,163 @@ class VaultTest extends TestCase
 
         $this->expectExceptionMessage('SLUIS_VAULT_KEY');
         (new JsonFile)->read($path);
+    }
+
+    /**
+     * A vault that loads half of what it holds puts half the people back and says
+     * it is done. So an entry that is not a type and a value stops the read, and
+     * the message says what is wrong with the file without quoting what is in it.
+     */
+    public function test_a_vault_with_an_entry_it_cannot_read_is_refused(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('not one Sluis wrote');
+
+        Vault::fromArray(['version' => 1, 'entries' => ['voornaam1mask' => ['type' => 'voornaam', 'value' => ['Karel']]]]);
+    }
+
+    /**
+     * Valid JSON is not yet a vault, and neither is a file that is no JSON at all:
+     * an empty one, one cut short. Each is refused as what it is, and none of it
+     * is quoted in the refusal.
+     */
+    public function test_a_file_that_is_not_a_vault_is_refused(): void
+    {
+        foreach (['"Karel"', '', '{"version":1,"entries":{"voornaam1mask":{"type":"voornaam","value":"Kar'] as $contents) {
+            file_put_contents($path = $this->dir.'/v.json', $contents);
+            $message = 'it was read as a vault';
+
+            try {
+                (new JsonFile)->read($path);
+            } catch (RuntimeException $e) {
+                $message = $e->getMessage();
+            }
+
+            $this->assertStringContainsString('not a vault', $message);
+            $this->assertStringNotContainsString('Kar', $message);
+        }
+    }
+
+    /**
+     * Any JSON object used to read as a vault with nobody in it, and the next
+     * masking run then wrote over the file: an answer somebody had saved, with
+     * the only copy of its vault inside. A vault says that it is one.
+     */
+    public function test_json_that_does_not_say_it_is_a_vault_is_not_read_as_an_empty_one(): void
+    {
+        foreach ([[], ['name' => 'andronewille/sluis'], ['entries' => []], ['version' => 2, 'entries' => []]] as $data) {
+            try {
+                Vault::fromArray($data);
+                $refused = false;
+            } catch (InvalidArgumentException) {
+                $refused = true;
+            }
+
+            $this->assertTrue($refused, json_encode($data).' was read as a vault');
+        }
+    }
+
+    /**
+     * A vault a caller built by hand can have its fields the wrong way round, and
+     * then the "type" is somebody's name. The message says a type is unknown and
+     * does not say which.
+     */
+    public function test_an_unknown_type_is_not_quoted_back(): void
+    {
+        try {
+            Vault::fromArray(['version' => 1, 'entries' => ['voornaam1mask' => ['type' => 'Karel Jansen', 'value' => 'voornaam']]]);
+            $this->fail('A type Sluis does not know was accepted.');
+        } catch (InvalidArgumentException $e) {
+            $this->assertStringContainsString('a type Sluis does not know', $e->getMessage());
+            $this->assertStringNotContainsString('Karel', $e->getMessage());
+        }
+    }
+
+    /** `"false"` is a string, and a string that is not empty is true to a cast. */
+    public function test_strict_is_yes_or_no_and_nothing_that_merely_reads_like_it(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+
+        Vault::fromArray(['version' => 1, 'strict' => 'false', 'entries' => []]);
+    }
+
+    /**
+     * A token is what Sluis mints. A list where the entries belong has the tokens
+     * 0 and 1, which stand in any text with a number in it, and an empty key is
+     * a token that stands between every two characters.
+     */
+    public function test_an_entry_that_is_not_filed_under_a_mask_is_refused(): void
+    {
+        $entry = ['type' => 'voornaam', 'value' => 'Karel'];
+
+        foreach ([[$entry], ['' => $entry], ['12' => $entry], ['Karel' => $entry]] as $entries) {
+            try {
+                Vault::fromArray(['version' => 1, 'entries' => $entries]);
+                $refused = false;
+            } catch (InvalidArgumentException $e) {
+                $refused = str_contains($e->getMessage(), 'not filed under a mask');
+            }
+
+            $this->assertTrue($refused);
+        }
+    }
+
+    /**
+     * `touch` on a directory succeeds, and the `chmod` that follows it closed the
+     * directory to its owner: every vault inside it gone until somebody put the
+     * mode back, and a message that did not say so.
+     */
+    public function test_a_directory_is_never_taken_for_the_vault_file(): void
+    {
+        mkdir($directory = $this->dir.'/vaults', 0700);
+
+        foreach ([new JsonFile, new Sealed('een lange wachtzin voor de kluis')] as $store) {
+            try {
+                $store->write($directory, Vault::empty());
+                $message = 'it was written';
+            } catch (RuntimeException $e) {
+                $message = $e->getMessage();
+            }
+
+            clearstatcache();
+            $this->assertStringContainsString('directory', $message);
+            $this->assertSame('0700', substr(sprintf('%o', fileperms($directory)), -4));
+        }
+
+        rmdir($directory);
+    }
+
+    /**
+     * The same refusal behind the seal. What opens with the key is not yet a
+     * vault: a file sealed by something else with the same passphrase decodes,
+     * and used to be read as a vault with nobody in it.
+     */
+    public function test_a_sealed_file_that_is_not_a_vault_is_refused(): void
+    {
+        $passphrase = 'een lange wachtzin voor de kluis';
+        $salt = random_bytes(16);
+        $nonce = random_bytes(SODIUM_CRYPTO_SECRETBOX_NONCEBYTES);
+        $key = sodium_crypto_pwhash(
+            SODIUM_CRYPTO_SECRETBOX_KEYBYTES,
+            $passphrase,
+            $salt,
+            SODIUM_CRYPTO_PWHASH_OPSLIMIT_INTERACTIVE,
+            SODIUM_CRYPTO_PWHASH_MEMLIMIT_INTERACTIVE,
+            SODIUM_CRYPTO_PWHASH_ALG_ARGON2ID13,
+        );
+
+        foreach (['"Karel"', '{"name":"Karel"}'] as $contents) {
+            file_put_contents($path = $this->dir.'/v.sealed', Sealed::MAGIC.$salt.$nonce.sodium_crypto_secretbox($contents, $nonce, $key));
+            $message = 'it was read as a vault';
+
+            try {
+                (new Sealed($passphrase))->read($path);
+            } catch (RuntimeException $e) {
+                $message = $e->getMessage();
+            }
+
+            $this->assertStringContainsString('not a vault', $message);
+            $this->assertStringNotContainsString('Karel', $message);
+        }
     }
 }

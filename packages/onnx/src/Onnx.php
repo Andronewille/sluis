@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Sluis\Onnx;
 
 use Sluis\Application\Ports\Recogniser;
@@ -55,14 +57,14 @@ final readonly class Onnx implements Recogniser
                     $offset + $at,
                     $found,
                     'model',
-                    (float) ($entity['score'] ?? 1.0),
+                    $entity['score'] ?? 1.0,
                 ));
 
                 $cursor = $at + strlen($found);
             }
         }
 
-        return $spans->resolved();
+        return $spans;
     }
 
     /**

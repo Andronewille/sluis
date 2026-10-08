@@ -1,11 +1,14 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Sluis\Infrastructure\Recognisers;
 
 use Sluis\Application\Ports\Recogniser;
 use Sluis\Domain\PiiType;
 use Sluis\Domain\Span;
 use Sluis\Domain\Spans;
+use Sluis\Domain\Unreadable;
 
 /**
  * Where something is, read from the word in front of it rather than from a list
@@ -53,7 +56,7 @@ final readonly class Places implements Recogniser
 
         foreach ($patterns as $found => $pattern) {
             if (preg_match_all($pattern, $text, $matches, PREG_OFFSET_CAPTURE | PREG_SET_ORDER) === false) {
-                continue;
+                throw Unreadable::text();
             }
 
             foreach ($matches as $match) {
@@ -67,6 +70,6 @@ final readonly class Places implements Recogniser
             }
         }
 
-        return $spans->resolved();
+        return $spans;
     }
 }

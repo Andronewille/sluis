@@ -1,11 +1,14 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Sluis\Infrastructure\Recognisers;
 
 use Sluis\Application\Ports\Recogniser;
 use Sluis\Domain\PiiType;
 use Sluis\Domain\Span;
 use Sluis\Domain\Spans;
+use Sluis\Domain\Unreadable;
 
 /**
  * The part of personal data that has a format, read as its format. An iban, a
@@ -54,7 +57,7 @@ final readonly class Patterns implements Recogniser
 
         foreach (self::RULES as $name => [$type, $pattern]) {
             if (preg_match_all($pattern, $text, $matches, PREG_OFFSET_CAPTURE) === false) {
-                continue;
+                throw Unreadable::text();
             }
 
             foreach ($matches[0] as [$found, $at]) {
@@ -66,7 +69,7 @@ final readonly class Patterns implements Recogniser
             }
         }
 
-        return $spans->resolved();
+        return $spans;
     }
 
     /** A url at the end of a sentence carries the full stop; the address does not. */
@@ -128,7 +131,7 @@ final readonly class Patterns implements Recogniser
         $remainder = 0;
 
         foreach (str_split($digits, 7) as $chunk) {
-            $remainder = (int) (($remainder.$chunk) % 97);
+            $remainder = (int) ($remainder.$chunk) % 97;
         }
 
         return $remainder === 1;

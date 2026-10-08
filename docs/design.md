@@ -29,7 +29,7 @@ ik ben te bereiken op telefoon1mask. Mvg, voornaam2mask
 
 Beste voornaam1mask, de boot op adres1mask in stad1mask is te bezichtigen. Bel telefoon1mask.
 
-                                    ↓  sluis --reverse
+                                    ↓  sluis unmask
 
 Beste Karel, de boot op Maanstraat 123 in Haasterdam is te bezichtigen. Bel 0612345678.
 ```
@@ -43,7 +43,7 @@ reply nonsense.
 composer require andronewille/sluis
 ```
 
-PHP 8.3 or newer with mbstring and sodium, and no other package comes with it. As a library:
+PHP 8.5 or newer with mbstring and sodium, and no other package comes with it. As a library:
 
 ```php
 use Sluis\Sluis;
@@ -63,10 +63,32 @@ As a pipe, where `sluis` is `vendor/bin/sluis`:
 
 ```sh
 sluis < mail.txt > masked.txt          # the vault lands in sluis-vault.json, mode 0600
-cat masked.txt | your-ai | sluis --reverse
-sluis --json --raw="$body"             # {"text":…,"found":…,"vault":…} and nothing on disk
-sluis --help
+cat masked.txt | your-ai | sluis unmask
+
+sluis --json < mail.txt                # {"text":…,"found":…,"vault":…} and nothing on disk
+sluis unmask --json < answer.json      # reads {"text":…,"vault":…}, answers {"text":…,"unrestored":…,"stray":…}
+sluis --help                           # and --version
 ```
+
+`sluis mask` is the same as `sluis`: the command is named when it has to be told apart, and it comes
+first. `--raw=TEXT` gives the text as an argument instead of on stdin, which is for trying Sluis out
+and not for mail: an argument is in every `ps` on the machine for as long as the command runs.
+
+Not everything has to go. What is sensitive enough to take out is the caller's to say:
+
+```php
+$masked = $sluis->only(PiiType::Iban, PiiType::Bsn)->mask($mail);     // these, and nothing else
+$masked = $sluis->without(PiiType::Url, PiiType::Stad)->mask($mail);  // everything but these
+```
+
+A kind that is left out is as if Sluis had no rule for it. The choice is made before overlapping
+finds are settled, because settling goes by rank: a find that is left out would first win its
+overlap and then be dropped, taking with it the find the caller did want. One telephone number in
+eleven passes the elfproef and would stay readable under `only(PiiType::Telefoon)`; a name that once
+follows `naar` would stay under `without(PiiType::Stad)`. The price is the other direction: with
+addresses left out, the `Jan` of `Jan Steenlaan 4` is a first name again and is masked. It holds for
+every recogniser, whenever it was added. Narrowing down to nothing is refused, and so is `only()`
+for a kind an earlier `without()` took away.
 
 A vault that is already at `--vault` is read and extended rather than replaced, so a run of mail
 through the same vault keeps one person on one token. That also means the file grows: it is a pile
@@ -74,6 +96,14 @@ of personal data in a working directory, and `SLUIS_VAULT_KEY` is the answer whe
 longer than the command that made it.
 
 `--json` is the shape an API wants: the vault comes back in the answer and Sluis keeps nothing.
+What `mask --json` answers is what `unmask --json` reads, so a caller that holds the vault itself
+never needs a file. A vault in the JSON wins over one at `--vault`, and with `--json` no vault file
+is read or written unless `--vault` names it: `sluis-vault.json` is the default of the plain pipe
+only. Every vault numbers its tokens from one, so the file an earlier run left behind fits a text
+it was never made for.
+
+The text is UTF-8 or it is refused. A mail in Windows-1252 has one byte for `é`, and a pattern asked
+to read that byte answers the way it answers when nothing is there.
 `SLUIS_VAULT_KEY` in the environment seals the vault file with that passphrase; the key is taken
 from the environment and not from an argument, because an argument is in every `ps` on the machine.
 
@@ -151,8 +181,10 @@ model that starts a sentence with a token capitalises it.
 One value is one token, however often it appears — otherwise the model reads two people where the
 mail had one, and answers the wrong one. Two spellings of one value (`Karel`, `KAREL`) are one
 person by default, which means the second one comes back in the first one's spelling. Pass
-`--strict` (or `Sluis::nederlands(strict: true)`) when the text has to come back byte for byte, and
-every spelling gets its own token instead.
+`--strict` (or `$sluis->mask($text, Vault::empty(strict: true))`) when the text has to come back
+byte for byte, and every spelling gets its own token instead. That is decided when a vault is made
+and it is the vault that remembers it: `--strict` against a vault that began without it is refused
+rather than quietly dropped.
 
 A token is never minted onto a string the document already uses, so text that itself reads like a
 masked document does not have its own words overwritten.
@@ -243,7 +275,8 @@ Written down rather than discovered later.
 - **A town is the shallowest rule here.** `in Haasterdam` works, `Haasterdam is mooi` does not. The
   word lists in `data/` are seeds — a few dozen names and towns — and real coverage means either
   the model or feeding `Gazetteer::fromFile()` the open BAG or CBS lists yourself. Sluis reads a
-  file; it never fetches one.
+  file; it never fetches one, and a file that is not there, or holds no words, is an error and not
+  an empty list.
 - **Masking more than needed is the failure mode.** A first name that is also an ordinary word gets
   masked wherever it appears once it has been recognised anywhere. The text suffers; nothing leaks.
 - **`aan de adres1mask`.** The article stays, unlike in the first sketch of this tool: leaving `de`
@@ -271,7 +304,7 @@ Written down rather than discovered later.
 |---|---|
 | Finding the people in the text, masking them, putting them back | Sluis |
 | Holding the vault | the caller. Over an API it is returned, never stored |
-| Deciding what is sensitive enough to mask | the caller, by choosing recognisers |
+| Deciding what is sensitive enough to mask | the caller, with `only()` and `without()`, or by choosing recognisers |
 | Calling the AI in the middle | the caller. Sluis never calls a model that is not on this machine |
 | Keeping a record of what was masked | the caller. Sluis remembers nothing between runs |
 

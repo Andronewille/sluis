@@ -1,25 +1,39 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Sluis\Application;
 
 use Sluis\Application\Ports\Recogniser;
 use Sluis\Domain\CannotPlace;
 use Sluis\Domain\Leaked;
 use Sluis\Domain\Masked;
+use Sluis\Domain\PiiType;
 use Sluis\Domain\Span;
 use Sluis\Domain\Spans;
+use Sluis\Domain\Unreadable;
 use Sluis\Domain\Vault;
 
 /** The forward half: text in, text with the people taken out and a vault that can put them back. */
 final readonly class Anonymise
 {
-    public function __construct(private Recogniser $recogniser) {}
+    /**
+     * @param  list<PiiType>|null  $only  the kinds to mask; everything that is found, when nothing is said
+     */
+    public function __construct(
+        private Recogniser $recogniser,
+        private ?array $only = null,
+    ) {}
 
     public function __invoke(string $text, ?Vault $vault = null): Masked
     {
         $vault ??= Vault::empty();
 
-        $spans = $this->recogniser->recognise($text)->resolved();
+        if (! mb_check_encoding($text, 'UTF-8')) {
+            throw Unreadable::notUtf8();
+        }
+
+        $spans = $this->chosen($this->recogniser->recognise($text))->resolved();
 
         $this->refuseAWrongOffset($text, $spans);
 
@@ -49,6 +63,27 @@ final readonly class Anonymise
     }
 
     /**
+     * The caller's choice of what to mask, made before anything else: a kind that
+     * is left out is as if no rule for it existed. It cannot be made later.
+     * Overlaps are settled by rank, so a claim that is left out would first win
+     * its overlap and then be dropped, and take with it the claim the caller did
+     * want — a telephone number that happens to pass the elfproef, a first name
+     * a place cue also matched. Both stayed readable when this was asked last.
+     *
+     * The price is the other direction, which is the one to be wrong in: with
+     * addresses left alone, the first name in `Jan Steenlaan 4` is a first name
+     * again and is masked.
+     */
+    private function chosen(Spans $claims): Spans
+    {
+        if ($this->only === null) {
+            return $claims;
+        }
+
+        return new Spans(...array_filter([...$claims], fn (Span $span) => in_array($span->type, $this->only, true)));
+    }
+
+    /**
      * A span has to point at what it says it points at, and a recogniser is the one
      * thing here that can be wrong about that. The model does not report offsets, so
      * the ONNX adapter works them out, and an offset out by one masks the wrong
@@ -59,7 +94,7 @@ final readonly class Anonymise
     {
         foreach ($spans as $span) {
             if (substr($text, $span->start, strlen($span->text)) !== $span->text) {
-                throw CannotPlace::misplaced($span->type, $span->found === '' ? 'a recogniser' : $span->found);
+                throw CannotPlace::misplaced($span->type, $span->by === '' ? 'a recogniser' : $span->by);
             }
         }
     }
@@ -73,18 +108,36 @@ final readonly class Anonymise
      */
     private function everywhere(string $text, Spans $spans): Spans
     {
+        // Each value is looked for once, and a place a span already stands is not
+        // claimed again. A name that signs forty mails of one thread is forty
+        // spans; asked forty times where it occurs, it was sixteen hundred, and
+        // a long thread ran out of memory before it was masked.
+        $standing = [];
+        $asked = [];
         $extra = [];
 
         foreach ($spans as $span) {
-            $pattern = '/(?<![\p{L}\p{N}_])'.preg_quote($span->text, '/').'(?![\p{L}\p{N}_])/iu';
+            $standing[$span->type->value.'|'.$span->start.'|'.strlen($span->text)] = true;
+        }
 
-            if (preg_match_all($pattern, $text, $matches, PREG_OFFSET_CAPTURE) === false) {
+        foreach ($spans as $span) {
+            if (isset($asked[$span->type->value.'|'.$span->text])) {
                 continue;
             }
 
+            $asked[$span->type->value.'|'.$span->text] = true;
+            $pattern = '/(?<![\p{L}\p{N}_])'.preg_quote($span->text, '/').'(?![\p{L}\p{N}_])/iu';
+
+            if (preg_match_all($pattern, $text, $matches, PREG_OFFSET_CAPTURE) === false) {
+                throw Unreadable::text();
+            }
+
             foreach ($matches[0] as [$found, $at]) {
-                if ($at !== $span->start) {
-                    $extra[] = new Span($span->type, $at, $found, $span->found.'+elders', $span->confidence);
+                $place = $span->type->value.'|'.$at.'|'.strlen($found);
+
+                if (! isset($standing[$place])) {
+                    $standing[$place] = true;
+                    $extra[] = new Span($span->type, $at, $found, $span->by.'+elders', $span->confidence);
                 }
             }
         }
@@ -99,10 +152,24 @@ final readonly class Anonymise
      */
     private function refuseToLeak(string $masked, Spans $spans): void
     {
+        $checked = [];
+
         foreach ($spans as $span) {
+            // Once for each value, not once for each place it stood.
+            if (isset($checked[$span->text])) {
+                continue;
+            }
+
+            $checked[$span->text] = true;
             $pattern = '/(?<![\p{L}\p{N}_])'.preg_quote($span->text, '/').'(?![\p{L}\p{N}_])/u';
 
-            if (preg_match($pattern, $masked) === 1) {
+            $standing = preg_match($pattern, $masked);
+
+            if ($standing === false) {
+                throw Unreadable::text();
+            }
+
+            if ($standing === 1) {
                 throw new Leaked("A {$span->type->value} is still readable in the masked text.");
             }
         }

@@ -11,10 +11,10 @@
     },
     "type": "library",
     "repositories": [
-        {"type": "path", "url": "../core*"}
+        {"type": "path", "url": "../core*", "options": {"versions": {"andronewille/sluis": "dev-main"}}}
     ],
     "require": {
-        "php": "^8.3",
+        "php": "^8.5",
         "andronewille/sluis": "^0.1@dev",
         "codewithkyrian/transformers": "^0.6",
         "ext-ffi": "*"

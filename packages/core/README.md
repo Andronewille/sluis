@@ -27,14 +27,14 @@ Beste Karel, de boot op Maanstraat 123 in Haasterdam is te bezichtigen. Bel 0612
 composer require andronewille/sluis
 ```
 
-PHP 8.3 or newer with mbstring and sodium. Nothing else comes with it.
+PHP 8.5 or newer with mbstring and sodium. Nothing else comes with it.
 
 ## Usage
 
 Try it from the command line first:
 
 ```sh
-vendor/bin/sluis --json --raw="Hey Karel, bel 0612345678. Mvg, Bob"
+echo "Hey Karel, bel 0612345678. Mvg, Bob" | vendor/bin/sluis --json
 ```
 
 ```json
@@ -61,7 +61,7 @@ As a pipe:
 
 ```sh
 vendor/bin/sluis < mail.txt > masked.txt          # what was taken out goes to sluis-vault.json
-cat masked.txt | your-ai | vendor/bin/sluis --reverse
+cat masked.txt | your-ai | vendor/bin/sluis unmask
 ```
 
 The vault is the one thing that holds what was taken out. You keep it; Sluis stores nothing.
@@ -79,6 +79,7 @@ The vault is the one thing that holds what was taken out. You keep it; Sluis sto
 | towns | after a cue such as `in`, and from a word list |
 
 Amounts are left alone on purpose. Money is not personal data, and an answer without it is useless.
+To leave more alone, say so: `$sluis->without(PiiType::Url)`, or `$sluis->only(PiiType::Iban, PiiType::Bsn)`.
 
 ## What it promises
 
