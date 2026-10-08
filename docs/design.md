@@ -67,12 +67,23 @@ cat masked.txt | your-ai | sluis unmask
 
 sluis --json < mail.txt                # {"text":…,"found":…,"vault":…} and nothing on disk
 sluis unmask --json < answer.json      # reads {"text":…,"vault":…}, answers {"text":…,"stray":…}
-sluis --help
+sluis --help                           # and --version
 ```
 
 `sluis mask` is the same as `sluis`: the command is named when it has to be told apart, and it comes
 first. `--raw=TEXT` gives the text as an argument instead of on stdin, which is for trying Sluis out
 and not for mail: an argument is in every `ps` on the machine for as long as the command runs.
+
+Not everything has to go. What is sensitive enough to take out is the caller's to say:
+
+```php
+$sluis->only(PiiType::Iban, PiiType::Bsn)->mask($mail);     // these, and nothing else that is found
+$sluis->without(PiiType::Url, PiiType::Stad)->mask($mail);  // everything but these
+```
+
+The choice is made after overlapping finds are settled, so leaving addresses alone leaves `Jan
+Steenlaan 4` alone, first name and all. It holds for every recogniser, whenever it was added, and
+narrowing down to nothing is refused.
 
 A vault that is already at `--vault` is read and extended rather than replaced, so a run of mail
 through the same vault keeps one person on one token. That also means the file grows: it is a pile
@@ -281,7 +292,7 @@ Written down rather than discovered later.
 |---|---|
 | Finding the people in the text, masking them, putting them back | Sluis |
 | Holding the vault | the caller. Over an API it is returned, never stored |
-| Deciding what is sensitive enough to mask | the caller, by choosing recognisers |
+| Deciding what is sensitive enough to mask | the caller, with `only()` and `without()`, or by choosing recognisers |
 | Calling the AI in the middle | the caller. Sluis never calls a model that is not on this machine |
 | Keeping a record of what was masked | the caller. Sluis remembers nothing between runs |
 

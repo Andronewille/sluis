@@ -14,6 +14,14 @@ behaviour: a new rule masks text an older version left alone, and the changelog 
 - Strict grouping belongs to the vault alone. `Sluis::nederlands(strict: true)` is gone: pass
   `Vault::empty(strict: true)` to `mask()`. `--strict` against a vault that began without it exits
   `2` instead of being ignored, and so does `--strict` with `unmask`.
+- `Sluis::only()` and `Sluis::without()` choose which kinds are masked, without assembling the
+  recognisers by hand.
+- `mask()` and `unmask()` are `#[NoDiscard]`: throwing away what they return is a warning.
+- `Sluis::with()` is gone, since it was the constructor under another name: `new Sluis($recogniser)`.
+- `Span::$found` is `Span::$by`. It names the rule that found the span, and shared its name with
+  the counts in `Masked::$found`.
+- The command takes `--vault PATH` as well as `--vault=PATH`, answers `--version`, and builds no
+  recogniser to unmask.
 - `Gazetteer::fromFile()` throws when the list is not there, where it used to read as empty and
   mask nothing.
 - `--help` says that `--raw=TEXT` is readable by every user on the machine while the command runs,
