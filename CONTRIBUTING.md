@@ -34,6 +34,9 @@ ffi --network none sluis/php-ffi php your-script.php # and from here on it needs
 
 ## Before a pull request
 
+Branch from `next` and open the pull request against it. `main` is the last release and moves only
+when `next` is merged into it.
+
 - `art vendor/bin/phpunit`, `art vendor/bin/pint --test` and `art vendor/bin/phpstan` pass. Pint
   formats; nobody hand-styles.
 - `bin/check-pointers` passes: it re-reads every `path:line` in the docs.

@@ -57,10 +57,13 @@ nowhere else, so the `split` job in `.github/workflows/tests.yml` pushes `packag
 `main` on every push, and a tag when one is pushed here. Packagist follows the mirrors. Nothing is
 ever committed to a mirror by hand.
 
-1. Date the entry in `CHANGELOG.md`.
-2. `git tag v0.2.0 && git push origin main v0.2.0`.
-3. On a new minor, move the `branch-alias` in both packages and the `andronewille/sluis` constraint
-   in `packages/onnx/composer.json` along with it.
+Work lands on `next`. `main` moves only when `next` is merged into it, and that merge is a release:
+`main` is always the last version published, and nothing is committed to it directly.
+
+1. On `next`, date the entry in `CHANGELOG.md`. On a new minor, move the `branch-alias` in both
+   packages and the `andronewille/sluis` constraint in `packages/onnx/composer.json` along with it.
+2. `git switch main && git merge next`.
+3. `git tag v0.2.0 && git push origin main v0.2.0`.
 
 ## Invariants
 
