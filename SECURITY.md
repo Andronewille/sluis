@@ -3,8 +3,8 @@
 Sluis exists to keep personal data out of places it should not reach, so these are security
 problems and not ordinary bugs:
 
-- a value that is still readable in masked text and that the README does not already list under
-  "Where it is weak";
+- a value that is still readable in masked text and that [the design document](docs/design.md) does not already
+  list under "Where it is weak";
 - a value that reaches an exception message, a log line or anything else that is not the caller's
   output;
 - anything that makes Sluis open a network connection;

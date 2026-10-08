@@ -3,7 +3,7 @@
 # The docs point into the code with path:line, and a line number is the one kind of
 # reference that rots quietly: the file is still there, the line still has something
 # on it, and it is no longer what the sentence promised. This reads every reference in
-# CLAUDE.md and README.md, prints what each one lands on, and fails when it lands on
+# CLAUDE.md and docs/design.md, prints what each one lands on, and fails when it lands on
 # nothing - a missing file, a line past the end, a blank line, a lone brace, a
 # comment. Reading the printed column is the other half of the check: a pointer that
 # slid two methods down still lands on code, and only a person can see that it is the
@@ -142,4 +142,4 @@ END {
 AWK
 )
 
-awk "$prog" CLAUDE.md README.md
+awk "$prog" CLAUDE.md docs/design.md

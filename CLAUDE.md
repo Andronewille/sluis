@@ -4,7 +4,7 @@ Masks the people out of Dutch text before an AI system sees it, and puts them ba
 Offline: nothing in the core opens a socket, and the optional model runs from weights already
 on disk.
 
-`README.md` is the design document — what each rule finds, why the tokens look the way they do,
+`docs/design.md` is the design document — what each rule finds, why the tokens look the way they do,
 where it is weak, and what is deliberately not built yet. Read it before changing behaviour.
 This file is the rest.
 
@@ -24,7 +24,9 @@ trees so the whole suite runs at once; each package's own `composer.json` is wha
 - `docker/` — the toolchain image, and the one with FFI.
 
 Each package carries its own `README.md`, `LICENSE` and `.gitattributes`, because each is split out
-to a read-only mirror and that mirror is what Packagist and a `composer require` see.
+to a read-only mirror and that mirror is what Packagist and a `composer require` see. The root
+`README.md` is a symlink to `packages/core/README.md`: one pitch, shown in both places, so every
+link in it is either a full URL or a file both places have.
 
 ## Running anything
 
@@ -41,7 +43,7 @@ Pass `-u` and `HOME=/tmp`, or the container leaves root-owned files in the check
 no FFI on purpose: `docker/php-ffi.Dockerfile` is for the ONNX package alone, and a test that only
 passes there is a test in the wrong package.
 
-`bin/check-pointers` re-reads every `path:line` below and in the README and fails when one no longer
+`bin/check-pointers` re-reads every `path:line` below and in `docs/design.md` and fails when one no longer
 lands on the code it names. It needs neither PHP nor Docker; run it after moving code, and write
 pointers from the repository root so it can find them.
 
