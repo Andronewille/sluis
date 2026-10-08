@@ -11,9 +11,10 @@ There is no PHP on the host. Everything runs in the project's own image:
 docker build -t sluis/php -f docker/php.Dockerfile .
 alias art='docker run --rm -u $(id -u):$(id -g) -e HOME=/tmp -v "$PWD":/w -w /w sluis/php php'
 
-art composer install
+art /usr/bin/composer install
 art vendor/bin/phpunit
 art vendor/bin/pint --test
+art vendor/bin/phpstan
 art packages/core/bin/sluis --raw="Hey Karel, bel 0612345678. Mvg, Bob" --json
 ```
 
@@ -33,7 +34,8 @@ ffi --network none sluis/php-ffi php your-script.php # and from here on it needs
 
 ## Before a pull request
 
-- `art vendor/bin/phpunit` and `art vendor/bin/pint --test` pass. Pint formats; nobody hand-styles.
+- `art vendor/bin/phpunit`, `art vendor/bin/pint --test` and `art vendor/bin/phpstan` pass. Pint
+  formats; nobody hand-styles.
 - `bin/check-pointers` passes: it re-reads every `path:line` in the docs.
 - A new rule comes with its tests, and a test that describes a promise says why in its docblock.
 - No real person in an example or a fixture. A made-up name and number do the same work.

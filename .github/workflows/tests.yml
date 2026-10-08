@@ -17,7 +17,7 @@ jobs:
 
     strategy:
       matrix:
-        php: ['8.3', '8.4', '8.5']
+        php: ['8.5']
 
     steps:
       - uses: actions/checkout@v7
@@ -28,15 +28,22 @@ jobs:
           extensions: mbstring, sodium
           coverage: none
 
+      # Asked rather than assumed: where Composer keeps its cache depends on the runner.
+      - id: composer-cache
+        run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
+
       - name: Cache Composer
         uses: actions/cache@v5
         with:
-          path: ~/.composer/cache
+          path: ${{ steps.composer-cache.outputs.dir }}
           key: composer-${{ matrix.php }}-${{ hashFiles('composer.lock') }}
+          restore-keys: composer-${{ matrix.php }}-
 
       - run: composer install --no-interaction --prefer-dist --no-progress
 
       - run: vendor/bin/pint --test
+
+      - run: vendor/bin/phpstan analyse --no-progress
 
       - run: vendor/bin/phpunit
 

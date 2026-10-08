@@ -22,6 +22,7 @@ trees so the whole suite runs at once; each package's own `composer.json` is wha
 - `packages/onnx` — `andronewille/sluis-onnx`. A local model as one more recogniser, opt-in because
   it needs FFI and 178 MB of weights.
 - `docker/` — the toolchain image, and the one with FFI.
+- `phpstan/` — what the analysis is told about a library the workspace cannot install.
 
 Each package carries its own `README.md`, `LICENSE` and `.gitattributes`, because each is split out
 to a read-only mirror and that mirror is what Packagist and a `composer require` see. The root
@@ -37,6 +38,7 @@ docker build -t sluis/php -f docker/php.Dockerfile .          # once
 alias art='docker run --rm -u $(id -u):$(id -g) -e HOME=/tmp -v "$PWD":/w -w /w sluis/php php'
 art vendor/bin/phpunit
 art vendor/bin/pint --test
+art vendor/bin/phpstan
 ```
 
 Pass `-u` and `HOME=/tmp`, or the container leaves root-owned files in the checkout. That image has
@@ -66,17 +68,17 @@ These are the point of the tool rather than preferences, and each one is enforce
 where to look before arguing with it.
 
 - **Nothing reaches the network** — not a fetch, not a fallback, not a one-off weight download.
-  `packages/core/tests/ArchitectureTest.php:24`, `packages/onnx/tests/ArchitectureTest.php:16`.
+  `packages/core/tests/ArchitectureTest.php:27`, `packages/onnx/tests/ArchitectureTest.php:18`.
 - **`Vault::value()` has one caller: the reverse path.** Anything else that wants a value — a log
   line, a progress message, a nicer error — is the leak this tool exists to prevent.
-  `packages/core/src/Domain/Vault.php:100`, kept true at
-  `packages/core/tests/ArchitectureTest.php:97` and `packages/core/tests/ArchitectureTest.php:119`.
+  `packages/core/src/Domain/Vault.php:123`, kept true at
+  `packages/core/tests/ArchitectureTest.php:103` and `packages/core/tests/ArchitectureTest.php:125`.
 - **No plaintext in an exception, a log or a dump.** A message names the type and the recogniser,
   never the words.
 - **A recogniser that cannot place what it found throws.** Skipping leaves the value in the text and
-  reports success: `packages/core/src/Application/Anonymise.php:62`, `packages/onnx/src/Onnx.php:115`.
+  reports success: `packages/core/src/Application/Anonymise.php:64`, `packages/onnx/src/Onnx.php:117`.
 - **Masked text is checked on every run, not only in tests** —
-  `packages/core/src/Application/Anonymise.php:106`.
+  `packages/core/src/Application/Anonymise.php:108`.
 - **The reverse path only substitutes.** No recogniser, no model, no branching on content.
 - **The domain imports nothing and the application does not know its adapters.** `Sluis.php` is the
   one allowed exception.
@@ -84,7 +86,11 @@ where to look before arguing with it.
 
 ## Conventions
 
-- PHPUnit, not Pest. Pint with the default Laravel preset is the formatter; run it, don't hand-style.
+- PHPUnit, not Pest. Pint is the formatter: the Laravel preset plus `declare(strict_types=1)` in
+  every file, which `pint.json` adds for you. Run it, don't hand-style.
+- PHPStan at `max`, with no baseline and nothing ignored. `phpstan/transformers-php.php` tells it
+  what TransformersPHP looks like, because the workspace has no FFI to install the real one with;
+  it follows the constraint in `packages/onnx/composer.json`.
 - Code, comments and commit messages in English. The mask labels and the lists in `data/` are Dutch,
   because the model reads them.
 - Commits read `area: what changed and why` — lower case, no period, one line.

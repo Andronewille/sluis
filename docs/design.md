@@ -43,7 +43,7 @@ reply nonsense.
 composer require andronewille/sluis
 ```
 
-PHP 8.3 or newer with mbstring and sodium, and no other package comes with it. As a library:
+PHP 8.5 or newer with mbstring and sodium, and no other package comes with it. As a library:
 
 ```php
 use Sluis\Sluis;

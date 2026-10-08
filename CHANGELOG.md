@@ -3,6 +3,13 @@
 Both packages are released together under one version. Until 1.0 a minor version may change
 behaviour: a new rule masks text an older version left alone, and the changelog says so.
 
+## Unreleased
+
+- Both packages need PHP 8.5 or newer; 0.1.0 is the last version that runs on 8.3 and 8.4.
+- Every file declares strict types, and PHPStan reads the whole workspace at its strictest level.
+- A vault file that does not hold what Sluis wrote is refused with a message of its own, instead of
+  being read as far as it went.
+
 ## 0.1.0 — 2026-10-08
 
 The first release.

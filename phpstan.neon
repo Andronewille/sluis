@@ -1,0 +1,11 @@
+parameters:
+    level: max
+    paths:
+        - packages/core/bin/sluis
+        - packages/core/src
+        - packages/core/tests
+        - packages/onnx/src
+        - packages/onnx/tests
+    scanFiles:
+        # TransformersPHP needs FFI and is not installed in the workspace.
+        - phpstan/transformers-php.php
