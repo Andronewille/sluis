@@ -7,6 +7,17 @@ behaviour: a new rule masks text an older version left alone, and the changelog 
 
 - Both packages need PHP 8.5 or newer; 0.1.0 is the last version that runs on 8.3 and 8.4.
 - Every file declares strict types, and PHPStan reads the whole workspace at its strictest level.
+- The command says what the API says: `sluis mask` and `sluis unmask`. `--reverse` is gone and
+  says where it went; a bare `sluis` still masks.
+- `sluis unmask --json` reads `{"text":…,"vault":…}`, which is what `sluis --json` answers, and
+  answers `{"text":…,"unrestored":…,"stray":…}`. No vault file is needed for the round trip.
+- Strict grouping belongs to the vault alone. `Sluis::nederlands(strict: true)` is gone: pass
+  `Vault::empty(strict: true)` to `mask()`. `--strict` against a vault that began without it exits
+  `2` instead of being ignored, and so does `--strict` with `unmask`.
+- `Gazetteer::fromFile()` throws when the list is not there, where it used to read as empty and
+  mask nothing.
+- `--help` says that `--raw=TEXT` is readable by every user on the machine while the command runs,
+  and the README pipes the text in instead.
 - A vault file that does not hold what Sluis wrote is refused with a message of its own, instead of
   being read as far as it went.
 

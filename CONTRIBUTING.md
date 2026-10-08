@@ -15,7 +15,7 @@ art /usr/bin/composer install
 art vendor/bin/phpunit
 art vendor/bin/pint --test
 art vendor/bin/phpstan
-art packages/core/bin/sluis --raw="Hey Karel, bel 0612345678. Mvg, Bob" --json
+art packages/core/bin/sluis --json --raw="Hey Karel, bel 0612345678. Mvg, Bob"
 ```
 
 The ONNX adapter needs FFI, which this image deliberately does not have —
